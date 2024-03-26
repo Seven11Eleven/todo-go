@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>To-Do List</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>To-Do List</h1>
+        <div id="todoLists">
+            <!-- Todo Lists will be rendered here -->
+        </div>
+        <div id="createTodoListForm">
+            <h2>Create Todo List</h2>
+            <form id="todoListForm">
+                <input type="text" id="todoListTitle" name="title" placeholder="Todo List Title" required>
+                <input type="text" id="todoListDescription" name="description" placeholder="Todo List Description">
+                <button type="submit">Create Todo List</button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // Fetch todo lists when the page loads
+        document.addEventListener("DOMContentLoaded", () => {
+            fetchTodoLists();
+        });
+
+        // Function to fetch todo lists from the server
+        function fetchTodoLists() {
+            fetch("/todos")
+                .then(response => response.json())
+                .then(data => {
+                    const todoListsContainer = document.getElementById("todoLists");
+                    todoListsContainer.innerHTML = "";
+                    data.forEach(todoList => {
+                        const todoListDiv = document.createElement("div");
+                        todoListDiv.innerHTML = `
+                            <h2>${todoList.title}</h2>
+                            <p>${todoList.description}</p>
+                            <button onclick="deleteTodoList(${todoList.id})">Delete</button>
+                            <form id="taskForm-${todoList.id}">
+                                <input type="hidden" name="todoListId" value="${todoList.id}">
+                                <input type="text" name="title" placeholder="Task title" required>
+                                <input type="text" name="description" placeholder="Task description">
+                                <button type="submit">Add Task</button>
+                            </form>
+                            <ul id="tasks-${todoList.id}"></ul>
+                        `;
+                        todoListsContainer.appendChild(todoListDiv);
+                        fetchTasks(todoList.id);
+                        document.getElementById(`taskForm-${todoList.id}`).addEventListener("submit", event => {
+                            event.preventDefault();
+                            const formData = new FormData(event.target);
+                            const taskData = {
+                                title: formData.get("title"),
+                                description: formData.get("description"),
+                                completed: false, 
+                                todoListId: formData.get("todoListId")
+                            };
+                            fetch(`/todos/${taskData.todoListId}/tasks`, {
+                                method: "POST",
+                                headers: {
+                                    "Content-Type": "application/json"
+                                },
+                                body: JSON.stringify(taskData)
+                            })
+                            .then(response => response.json())
+                            .then(data => {
+                                console.log("Task created successfully:", data);
+                                fetchTasks(taskData.todoListId);
+                                event.target.reset();
+                            })
+                            .catch(error => console.error("Error creating task:", error));
+                        });
+                    });
+                })
+                .catch(error => console.error("Error fetching todo lists:", error));
+        }
+
+        // Function to delete a todo list
+        function deleteTodoList(todoListId) {
+            fetch(`/todos/${todoListId}`, {
+                method: "DELETE"
+            })
+            .then(response => {
+                if (response.ok) {
+                    fetchTodoLists(); // Refresh the page after deletion
+                } else {
+                    console.error("Failed to delete todo list");
+                }
+            })
+            .catch(error => console.error("Error deleting todo list:", error));
+        }
+
+        // Function to fetch tasks for a specific todo list
+        function fetchTasks(todoListId) {
+            fetch(`/todos/${todoListId}`)
+                .then(response => response.json())
+                .then(data => {
+                    const tasksList = document.getElementById(`tasks-${todoListId}`);
+                    tasksList.innerHTML = "";
+                    data.forEach(task => {
+                        const listItem = document.createElement("li");
+                        const checkbox = document.createElement("input");
+                        checkbox.type = "checkbox";
+                        checkbox.checked = task.completed;
+                        checkbox.onchange = () => toggleTaskCompletion(task.id, checkbox.checked, todoListId);
+                        listItem.textContent = `${task.title} - ${task.description}`;
+                        listItem.appendChild(checkbox);
+                        tasksList.appendChild(listItem);
+                    });
+                })
+                .catch(error => console.error("Error fetching tasks:", error));
+        }
+
+        // Function to toggle task completion status
+        function toggleTaskCompletion(taskId, completed, todoListId) {
+            fetch(`/todos/${todoListId}/tasks/${taskId}`, {
+                method: "PUT",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    completed: completed
+                })
+            })
+            .then(response => {
+                if (response.ok) {
+                    fetchTasks(todoListId); // Refresh tasks after updating completion status
+                } else {
+                    console.error("Failed to update task completion status");
+                }
+            })
+            .catch(error => console.error("Error updating task completion status:", error));
+        }
+
+        // Function to handle form submission and create new todo list
+        document.getElementById("todoListForm").addEventListener("submit", event => {
+            event.preventDefault();
+            const formData = new FormData(event.target);
+            const todoListData = {
+                title: formData.get("title"),
+                description: formData.get("description")
+            };
+            fetch("/todos", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify(todoListData)
+            })
+            .then(response => response.json())
+            .then(data => {
+                console.log("Todo list created successfully:", data);
+                fetchTodoLists(); // Refresh the page to display newly created todo list
+                event.target.reset();
+            })
+            .catch(error => console.error("Error creating todo list:", error));
+        });
+    </script>
+</body>
+</html>
